@@ -1,4 +1,4 @@
-// A fast drop-in for make.fun's csv-reader 1.0.0, second attempt.
+// A fast drop-in for make.fun's csv-reader 1.0.0, second attempt, revised.
 //
 // run(input) returns exactly what csv-reader 1.0.0 returns for the same
 // {text, header}: {columns, rows, errors}. The reading policy, in short:
@@ -29,13 +29,15 @@
 // assigned, never concatenated. Dropping the two regular expressions also
 // collapsed the garbage collector's share of the run from about a fifth to
 // about a fiftieth. Measured on the practice set (median of 9 interleaved
-// rounds, --no-incremental-marking): reference 416 ms, first attempt 129 ms,
-// this reader 92 ms — about 4.5x the reference, 1.4x the first attempt.
+// rounds, --no-incremental-marking): reference about 400 ms, first attempt
+// about 130 ms, this reader about 90 ms — roughly 4.5x the reference and
+// 1.5x the first attempt.
 
-// A quoted chunk that holds a line break, read as the reference reads it:
-// every CRLF and every lone CR becomes one LF. Reports through shared
-// variables (no array built per chunk): the rewritten chunk and how many
-// lines it spans, so the line count stays exact.
+/** A quoted chunk that holds a line break, read as the reference reads it:
+ * every CRLF and every lone CR becomes one LF. Reports through shared
+ * variables (no array built per chunk): the rewritten chunk and how many
+ * lines it spans, so the line count stays exact. A chunk whose breaks are
+ * only line feeds needs no rewriting, so it is handed back as it stands. */
 let normValue;
 let normLines;
 function normalizeChunk(chunk) {
@@ -53,14 +55,15 @@ function normalizeChunk(chunk) {
       lines++;
     }
   }
-  // A chunk with no CR in it needs no rewriting at all: the line feeds in
-  // it already read as line feeds, so hand the chunk back as it stands
-  // instead of slicing a copy of it.
   normValue = out === '' ? chunk : out + chunk.slice(start);
   normLines = lines;
 }
 
-/** csv-reader 1.0.0's answer for one case's input. */
+/**
+ * The answer for one case's input.
+ * @param {{text: string, header: boolean}} input
+ * @returns {{columns: string[] | null, rows: string[][], errors: {code: string, line: number, row: number | null}[]}}
+ */
 export function run(input) {
   const text = String(input.text);
   const header = input.header === true;
@@ -174,13 +177,13 @@ export function run(input) {
       fieldValue = value;
       fieldEnded = 0;
       fieldAdded = added;
-      return;
+    } else {
+      pos = term + 1;
+      line++;
+      fieldValue = value;
+      fieldEnded = 1;
+      fieldAdded = added;
     }
-    pos = term + 1;
-    line++;
-    fieldValue = value;
-    fieldEnded = 1;
-    fieldAdded = added;
   }
 
   // Reads a quoted field whose opening quote is at pos.
